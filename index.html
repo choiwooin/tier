@@ -44,7 +44,6 @@
     .item { 
       display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; 
       background: #3b82f6; color: white; border-radius: 4px; cursor: grab; font-weight: bold; user-select: none;
-      transition: transform 0.1s ease;
     }
     .item.dragging { opacity: 0.4; }
     .item input { 
@@ -220,7 +219,7 @@
       updateRank();
     }
 
-    // 인라인 위치 변경 가능한 드래그 앤 드롭
+    // 양방향(앞-뒤, 뒤-앞) 이동이 모두 작동하도록 좌표 판단 로직 수정
     function allowDrop(e) {
       e.preventDefault();
       let container = e.target;
@@ -229,7 +228,7 @@
       }
       if (!container || !draggedItem) return;
 
-      const afterElement = getDragAfterElement(container, e.clientX);
+      const afterElement = getDragAfterElement(container, e.clientX, e.clientY);
       if (afterElement == null) {
         container.appendChild(draggedItem);
       } else {
@@ -237,18 +236,24 @@
       }
     }
 
-    function getDragAfterElement(container, x) {
+    function getDragAfterElement(container, x, y) {
       const draggableElements = [...container.querySelectorAll('.item:not(.dragging)')];
 
       return draggableElements.reduce((closest, child) => {
         const box = child.getBoundingClientRect();
-        const offset = x - box.left - box.width / 2;
-        if (offset < 0 && offset > closest.offset) {
-          return { offset: offset, element: child };
-        } else {
-          return closest;
+        // 마우스 커서와 각 아이템 중앙과의 거리를 계산
+        const offsetX = x - (box.left + box.width / 2);
+        const offsetY = y - (box.top + box.height / 2);
+
+        // 커서보다 뒤(우측 또는 다음 줄)에 위치한 최단 거리 아이템 찾기
+        if (offsetY < -5 || (Math.abs(offsetY) <= 15 && offsetX < 0)) {
+          const distance = Math.hypot(offsetX, offsetY);
+          if (distance < closest.distance) {
+            return { distance: distance, element: child };
+          }
         }
-      }, { offset: Number.NEGATIVE_INFINITY }).element;
+        return closest;
+      }, { distance: Number.POSITIVE_INFINITY }).element;
     }
 
     function drop(e) {
@@ -308,7 +313,7 @@
       const shareableURL = window.location.origin + window.location.pathname + '#data=' + encoded;
 
       navigator.clipboard.writeText(shareableURL).then(() => {
-        alert('현재 티어 및 내부 순서가 포함된 공유 링크가 복사되었습니다!');
+        alert('현재 티어 및 순서가 포함된 공유 링크가 복사되었습니다!');
       });
     }
 
