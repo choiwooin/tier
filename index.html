@@ -71,13 +71,15 @@
 <body>
 
   <div class="title-container">
-    <input type="text" id="boardTitle" class="title-input" value="티어표 주제를 입력하세요" onfocus="this.select()">
+    <input type="text" id="boardTitle" class="title-input" value="티어표 주제를 입력하세요" onfocus="this.select()" oninput="saveState()">
   </div>
 
   <div class="controls">
     <input type="text" id="itemName" placeholder="이름 입력" onkeydown="if(event.key==='Enter') addItem()">
     <button onclick="addItem()">항목 추가</button>
     <button onclick="addTier()" class="sec">+ 티어 추가</button>
+    <button onclick="undo()" class="sec" title="단축키: Ctrl+Z">↩ 되돌리기 (Ctrl+Z)</button>
+    <button onclick="resetData()" class="danger">초기화</button>
     <button onclick="shareLink()" class="success">🔗 저장 및 링크 공유</button>
   </div>
 
@@ -110,17 +112,104 @@
     let idNum = 0;
     let draggedItem = null;
     const colors = ['#ff7f7f', '#ffbf7f', '#ffff7f', '#7fff7f', '#7fbfff', '#bf7fff', '#ff7fbf'];
+    const historyStack = [];
+    const LOCAL_STORAGE_KEY = 'tierlist_auto_save';
 
     window.onload = () => {
-      loadFromURL() || setupDefaultTiers();
+      // 우선순위: 1. 공유 URL 데이터 -> 2. 브라우저 자동 저장 데이터 -> 3. 기본 티어
+      if (!loadFromURL() && !loadFromLocalStorage()) {
+        setupDefaultTiers();
+      }
+      saveState();
+
+      // Ctrl + Z 단축키
+      document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+          if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+          e.preventDefault();
+          undo();
+        }
+      });
     };
 
-    function setupDefaultTiers() {
-      createTierRow('S', '#ff7f7f');
-      createTierRow('A', '#ffbf7f');
+    function getCurrentData() {
+      const data = {
+        title: document.getElementById('boardTitle').value,
+        tiers: [],
+        pool: Array.from(document.querySelectorAll('#pool .item-text')).map(e => e.textContent)
+      };
+
+      document.querySelectorAll('#tierBoard .tier-row:not(.tier-pool)').forEach(row => {
+        data.tiers.push({
+          name: row.querySelector('.tier-label span').textContent,
+          color: row.querySelector('.tier-label').style.backgroundColor,
+          items: Array.from(row.querySelectorAll('.item-text')).map(e => e.textContent)
+        });
+      });
+      return JSON.stringify(data);
     }
 
-    function createTierRow(name, color) {
+    function saveState() {
+      const state = getCurrentData();
+      
+      // LocalStorage에 즉시 자동 저장 (새로고침 대비)
+      localStorage.setItem(LOCAL_STORAGE_KEY, state);
+
+      // Ctrl + Z 히스토리 스택 관리
+      if (historyStack.length === 0 || historyStack[historyStack.length - 1] !== state) {
+        historyStack.push(state);
+        if (historyStack.length > 30) historyStack.shift();
+      }
+    }
+
+    function loadFromLocalStorage() {
+      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (!saved) return false;
+      try {
+        renderFromData(JSON.parse(saved));
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+
+    function resetData() {
+      if (confirm('모든 데이터가 초기화됩니다. 계속하시겠습니까?')) {
+        localStorage.removeItem(LOCAL_STORAGE_KEY);
+        location.hash = '';
+        location.reload();
+      }
+    }
+
+    function undo() {
+      if (historyStack.length <= 1) return;
+      historyStack.pop();
+      const previousState = historyStack[historyStack.length - 1];
+      renderFromData(JSON.parse(previousState));
+      localStorage.setItem(LOCAL_STORAGE_KEY, previousState); // 로컬 저장소 업데이트
+    }
+
+    function renderFromData(data) {
+      document.getElementById('boardTitle').value = data.title || '티어표';
+      
+      document.querySelectorAll('#tierBoard .tier-row:not(.tier-pool)').forEach(r => r.remove());
+      document.getElementById('pool').innerHTML = '';
+
+      data.tiers.forEach(t => {
+        const row = createTierRow(t.name, t.color, false);
+        const container = row.querySelector('.tier-items');
+        t.items.forEach(itemName => addItem(itemName, container, false));
+      });
+      data.pool.forEach(itemName => addItem(itemName, document.getElementById('pool'), false));
+      updateRank();
+    }
+
+    function setupDefaultTiers() {
+      createTierRow('S', '#ff7f7f', false);
+      createTierRow('A', '#ffbf7f', false);
+    }
+
+    function createTierRow(name, color, recordHistory = true) {
       const board = document.getElementById('tierBoard');
       const poolRow = document.getElementById('poolRow');
       const row = document.createElement('div');
@@ -133,10 +222,11 @@
         <button class="danger" onclick="deleteTier(this)">삭제</button>
       `;
       board.insertBefore(row, poolRow);
+      if (recordHistory) saveState();
       return row;
     }
 
-    function addItem(nameVal = null, targetContainer = null) {
+    function addItem(nameVal = null, targetContainer = null, recordHistory = true) {
       const input = document.getElementById('itemName');
       const val = nameVal || input.value.trim();
       if (!val) return;
@@ -161,12 +251,14 @@
         draggedItem = null;
         item.classList.remove('dragging');
         updateRank();
+        saveState();
       };
 
       const parent = targetContainer || document.getElementById('pool');
       parent.appendChild(item);
       if (!nameVal) input.value = '';
       updateRank();
+      if (recordHistory) saveState();
     }
 
     function editItemTextInline(spanEl) {
@@ -183,11 +275,13 @@
       spanEl.textContent = input.value.trim() || '항목';
       input.replaceWith(spanEl);
       updateRank();
+      saveState();
     }
 
     function deleteItem(btn) {
       btn.parentElement.remove();
       updateRank();
+      saveState();
     }
 
     function addTier() {
@@ -208,6 +302,7 @@
     function finishEditLabel(input, spanEl) {
       spanEl.textContent = input.value.trim() || '티어';
       input.replaceWith(spanEl);
+      saveState();
     }
 
     function deleteTier(btn) {
@@ -217,9 +312,9 @@
       while (items.length > 0) pool.appendChild(items[0]);
       row.remove();
       updateRank();
+      saveState();
     }
 
-    // 양방향(앞-뒤, 뒤-앞) 이동이 모두 작동하도록 좌표 판단 로직 수정
     function allowDrop(e) {
       e.preventDefault();
       let container = e.target;
@@ -241,11 +336,9 @@
 
       return draggableElements.reduce((closest, child) => {
         const box = child.getBoundingClientRect();
-        // 마우스 커서와 각 아이템 중앙과의 거리를 계산
         const offsetX = x - (box.left + box.width / 2);
         const offsetY = y - (box.top + box.height / 2);
 
-        // 커서보다 뒤(우측 또는 다음 줄)에 위치한 최단 거리 아이템 찾기
         if (offsetY < -5 || (Math.abs(offsetY) <= 15 && offsetX < 0)) {
           const distance = Math.hypot(offsetX, offsetY);
           if (distance < closest.distance) {
@@ -259,6 +352,7 @@
     function drop(e) {
       e.preventDefault();
       updateRank();
+      saveState();
     }
 
     function updateRank() {
@@ -294,21 +388,7 @@
     }
 
     function shareLink() {
-      const data = {
-        title: document.getElementById('boardTitle').value,
-        tiers: [],
-        pool: Array.from(document.querySelectorAll('#pool .item-text')).map(e => e.textContent)
-      };
-
-      document.querySelectorAll('#tierBoard .tier-row:not(.tier-pool)').forEach(row => {
-        data.tiers.push({
-          name: row.querySelector('.tier-label span').textContent,
-          color: row.querySelector('.tier-label').style.backgroundColor,
-          items: Array.from(row.querySelectorAll('.item-text')).map(e => e.textContent)
-        });
-      });
-
-      const jsonStr = JSON.stringify(data);
+      const jsonStr = getCurrentData();
       const encoded = encodeURIComponent(jsonStr);
       const shareableURL = window.location.origin + window.location.pathname + '#data=' + encoded;
 
@@ -323,15 +403,7 @@
       try {
         const jsonStr = decodeURIComponent(hash.replace('#data=', ''));
         const data = JSON.parse(jsonStr);
-
-        document.getElementById('boardTitle').value = data.title || '티어표';
-        data.tiers.forEach(t => {
-          const row = createTierRow(t.name, t.color);
-          const container = row.querySelector('.tier-items');
-          t.items.forEach(itemName => addItem(itemName, container));
-        });
-        data.pool.forEach(itemName => addItem(itemName, document.getElementById('pool')));
-        updateRank();
+        renderFromData(data);
         return true;
       } catch (e) {
         return false;
