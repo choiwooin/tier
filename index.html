@@ -29,7 +29,7 @@
     
     .tier-label { 
       width: 100px; display: flex; align-items: center; justify-content: center; 
-      font-weight: bold; color: #000; padding: 5px; box-sizing: border-box; cursor: pointer;
+      font-weight: bold; color: #000; padding: 5px; box-sizing: border-box; cursor: pointer; flex-shrink: 0;
     }
     .tier-label input { 
       width: 90%; text-align: center; font-weight: bold; background: rgba(255,255,255,0.85); 
@@ -40,10 +40,13 @@
     .tier-pool { background: #334155; }
     .tier-pool-label { background: #475569; color: white; cursor: default; }
 
+    /* 드래그 항목 카드 */
     .item { 
       display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; 
-      background: #3b82f6; color: white; border-radius: 4px; cursor: grab; font-weight: bold; user-select: none; 
+      background: #3b82f6; color: white; border-radius: 4px; cursor: grab; font-weight: bold; user-select: none;
+      transition: transform 0.1s ease;
     }
+    .item.dragging { opacity: 0.4; }
     .item input { 
       background: white; color: black; border: none; padding: 2px 4px; 
       border-radius: 3px; width: 80px; font-weight: bold;
@@ -106,6 +109,7 @@
 
   <script>
     let idNum = 0;
+    let draggedItem = null;
     const colors = ['#ff7f7f', '#ffbf7f', '#ffff7f', '#7fff7f', '#7fbfff', '#bf7fff', '#ff7fbf'];
 
     window.onload = () => {
@@ -149,7 +153,15 @@
 
       item.ondragstart = (e) => {
         if (e.target.tagName === 'INPUT') { e.preventDefault(); return; }
+        draggedItem = item;
+        item.classList.add('dragging');
         e.dataTransfer.setData('text', item.id);
+      };
+
+      item.ondragend = () => {
+        draggedItem = null;
+        item.classList.remove('dragging');
+        updateRank();
       };
 
       const parent = targetContainer || document.getElementById('pool');
@@ -208,17 +220,40 @@
       updateRank();
     }
 
-    function allowDrop(e) { e.preventDefault(); }
+    // 인라인 위치 변경 가능한 드래그 앤 드롭
+    function allowDrop(e) {
+      e.preventDefault();
+      let container = e.target;
+      if (!container.classList.contains('tier-items')) {
+        container = container.closest('.tier-items');
+      }
+      if (!container || !draggedItem) return;
+
+      const afterElement = getDragAfterElement(container, e.clientX);
+      if (afterElement == null) {
+        container.appendChild(draggedItem);
+      } else {
+        container.insertBefore(draggedItem, afterElement);
+      }
+    }
+
+    function getDragAfterElement(container, x) {
+      const draggableElements = [...container.querySelectorAll('.item:not(.dragging)')];
+
+      return draggableElements.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = x - box.left - box.width / 2;
+        if (offset < 0 && offset > closest.offset) {
+          return { offset: offset, element: child };
+        } else {
+          return closest;
+        }
+      }, { offset: Number.NEGATIVE_INFINITY }).element;
+    }
+
     function drop(e) {
       e.preventDefault();
-      const id = e.dataTransfer.getData('text');
-      const draggedEl = document.getElementById(id);
-      let target = e.target;
-      if (!target.classList.contains('tier-items')) target = target.closest('.tier-items');
-      if (target && draggedEl) {
-        target.appendChild(draggedEl);
-        updateRank();
-      }
+      updateRank();
     }
 
     function updateRank() {
@@ -273,7 +308,7 @@
       const shareableURL = window.location.origin + window.location.pathname + '#data=' + encoded;
 
       navigator.clipboard.writeText(shareableURL).then(() => {
-        alert('현재 티어표 상태가 포함된 공유 링크가 복사되었습니다!\n원하는 곳에 붙여넣기 하세요.');
+        alert('현재 티어 및 내부 순서가 포함된 공유 링크가 복사되었습니다!');
       });
     }
 
