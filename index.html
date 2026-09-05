@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>티어표 & 팀 생성기</title>
+  <style>
+    :root { --bg: #0f172a; --card: #1e293b; --accent: #38bdf8; --text: #f8fafc; }
+    body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
+    
+    .title-container { text-align: center; margin-bottom: 20px; }
+    .title-input {
+      font-size: 1.8rem; font-weight: bold; color: var(--accent);
+      background: transparent; border: none; border-bottom: 2px dashed #334155;
+      text-align: center; width: 80%; max-width: 600px; padding: 5px;
+    }
+    .title-input:focus { outline: none; border-bottom-color: var(--accent); }
+    
+    .controls { display: flex; gap: 10px; justify-content: center; background: var(--card); padding: 15px; border-radius: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+    input, button { padding: 10px; border-radius: 6px; border: 1px solid #334155; background: #0f172a; color: white; font-size: 0.9rem; }
+    button { background: var(--accent); color: #000; font-weight: bold; cursor: pointer; border: none; }
+    button.sec { background: #475569; color: white; }
+    button.success { background: #22c55e; color: white; }
+    button.danger { background: #ef4444; color: white; }
+    
+    .container { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+    .tier-board { display: flex; flex-direction: column; gap: 8px; }
+    .tier-row { display: flex; background: var(--card); border-radius: 6px; min-height: 60px; align-items: stretch; }
+    
+    .tier-label { 
+      width: 100px; display: flex; align-items: center; justify-content: center; 
+      font-weight: bold; color: #000; padding: 5px; box-sizing: border-box; cursor: pointer;
+    }
+    .tier-label input { 
+      width: 90%; text-align: center; font-weight: bold; background: rgba(255,255,255,0.85); 
+      color: #000; border: 1px solid #000; padding: 4px; border-radius: 4px;
+    }
+
+    .tier-items { flex: 1; display: flex; flex-wrap: wrap; gap: 8px; padding: 10px; align-items: center; min-height: 40px; }
+    .tier-pool { background: #334155; }
+    .tier-pool-label { background: #475569; color: white; cursor: default; }
+
+    .item { 
+      display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; 
+      background: #3b82f6; color: white; border-radius: 4px; cursor: grab; font-weight: bold; user-select: none; 
+    }
+    .item input { 
+      background: white; color: black; border: none; padding: 2px 4px; 
+      border-radius: 3px; width: 80px; font-weight: bold;
+    }
+    .item-del-btn { 
+      background: none; border: none; color: #fca5a5; cursor: pointer; 
+      font-weight: bold; padding: 0 2px; font-size: 1rem; line-height: 1;
+    }
+    .item-del-btn:hover { color: #ef4444; }
+
+    .sidebar { display: flex; flex-direction: column; gap: 20px; }
+    .panel { background: var(--card); padding: 15px; border-radius: 8px; }
+    .panel h2 { margin-top: 0; color: var(--accent); font-size: 1.1rem; }
+    ol { padding-left: 20px; margin: 0; }
+    li { margin-bottom: 4px; }
+    .team-box { background: #0f172a; padding: 8px; border-radius: 6px; margin-top: 8px; border: 1px solid #334155; }
+
+    @media (max-width: 768px) {
+      .container { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="title-container">
+    <input type="text" id="boardTitle" class="title-input" value="티어표 주제를 입력하세요" onfocus="this.select()">
+  </div>
+
+  <div class="controls">
+    <input type="text" id="itemName" placeholder="이름 입력" onkeydown="if(event.key==='Enter') addItem()">
+    <button onclick="addItem()">항목 추가</button>
+    <button onclick="addTier()" class="sec">+ 티어 추가</button>
+    <button onclick="shareLink()" class="success">🔗 저장 및 링크 공유</button>
+  </div>
+
+  <div class="container">
+    <div class="tier-board" id="tierBoard">
+      <div class="tier-row tier-pool" id="poolRow">
+        <div class="tier-label tier-pool-label">대기목록</div>
+        <div class="tier-items" id="pool" ondragover="allowDrop(event)" ondrop="drop(event)"></div>
+      </div>
+    </div>
+
+    <div class="sidebar">
+      <div class="panel">
+        <h2>실시간 순위</h2>
+        <ol id="rankingList"><span style="color:#64748b">배치된 항목이 없습니다.</span></ol>
+      </div>
+
+      <div class="panel">
+        <h2>팀 무작위 생성</h2>
+        <div style="display:flex; gap:5px; margin-bottom:10px;">
+          <input type="number" id="teamCount" value="2" min="2" style="width:50px;">
+          <button onclick="makeTeams()">팀 나누기</button>
+        </div>
+        <div id="teamResults"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let idNum = 0;
+    const colors = ['#ff7f7f', '#ffbf7f', '#ffff7f', '#7fff7f', '#7fbfff', '#bf7fff', '#ff7fbf'];
+
+    window.onload = () => {
+      loadFromURL() || setupDefaultTiers();
+    };
+
+    function setupDefaultTiers() {
+      createTierRow('S', '#ff7f7f');
+      createTierRow('A', '#ffbf7f');
+    }
+
+    function createTierRow(name, color) {
+      const board = document.getElementById('tierBoard');
+      const poolRow = document.getElementById('poolRow');
+      const row = document.createElement('div');
+      row.className = 'tier-row';
+      row.innerHTML = `
+        <div class="tier-label" style="background:${color}">
+          <span onclick="editLabelInline(this)">${name}</span>
+        </div>
+        <div class="tier-items" ondragover="allowDrop(event)" ondrop="drop(event)"></div>
+        <button class="danger" onclick="deleteTier(this)">삭제</button>
+      `;
+      board.insertBefore(row, poolRow);
+      return row;
+    }
+
+    function addItem(nameVal = null, targetContainer = null) {
+      const input = document.getElementById('itemName');
+      const val = nameVal || input.value.trim();
+      if (!val) return;
+
+      const item = document.createElement('div');
+      item.className = 'item';
+      item.draggable = true;
+      item.id = 'item-' + idNum++;
+      item.innerHTML = `
+        <span class="item-text" onclick="editItemTextInline(this)">${val}</span>
+        <button class="item-del-btn" onclick="deleteItem(this)" title="삭제">×</button>
+      `;
+
+      item.ondragstart = (e) => {
+        if (e.target.tagName === 'INPUT') { e.preventDefault(); return; }
+        e.dataTransfer.setData('text', item.id);
+      };
+
+      const parent = targetContainer || document.getElementById('pool');
+      parent.appendChild(item);
+      if (!nameVal) input.value = '';
+      updateRank();
+    }
+
+    function editItemTextInline(spanEl) {
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.value = spanEl.textContent;
+      input.onblur = () => finishEditItemText(input, spanEl);
+      input.onkeydown = (e) => { if (e.key === 'Enter') finishEditItemText(input, spanEl); };
+      spanEl.replaceWith(input);
+      input.focus(); input.select();
+    }
+
+    function finishEditItemText(input, spanEl) {
+      spanEl.textContent = input.value.trim() || '항목';
+      input.replaceWith(spanEl);
+      updateRank();
+    }
+
+    function deleteItem(btn) {
+      btn.parentElement.remove();
+      updateRank();
+    }
+
+    function addTier() {
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      createTierRow('NEW', color);
+    }
+
+    function editLabelInline(spanEl) {
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.value = spanEl.textContent;
+      input.onblur = () => finishEditLabel(input, spanEl);
+      input.onkeydown = (e) => { if (e.key === 'Enter') finishEditLabel(input, spanEl); };
+      spanEl.replaceWith(input);
+      input.focus(); input.select();
+    }
+
+    function finishEditLabel(input, spanEl) {
+      spanEl.textContent = input.value.trim() || '티어';
+      input.replaceWith(spanEl);
+    }
+
+    function deleteTier(btn) {
+      const row = btn.parentElement;
+      const items = row.querySelector('.tier-items').children;
+      const pool = document.getElementById('pool');
+      while (items.length > 0) pool.appendChild(items[0]);
+      row.remove();
+      updateRank();
+    }
+
+    function allowDrop(e) { e.preventDefault(); }
+    function drop(e) {
+      e.preventDefault();
+      const id = e.dataTransfer.getData('text');
+      const draggedEl = document.getElementById(id);
+      let target = e.target;
+      if (!target.classList.contains('tier-items')) target = target.closest('.tier-items');
+      if (target && draggedEl) {
+        target.appendChild(draggedEl);
+        updateRank();
+      }
+    }
+
+    function updateRank() {
+      const list = document.getElementById('rankingList');
+      const items = document.querySelectorAll('#tierBoard .tier-row:not(.tier-pool) .item .item-text');
+      list.innerHTML = '';
+      if (items.length === 0) {
+        list.innerHTML = '<span style="color:#64748b">배치된 항목이 없습니다.</span>';
+        return;
+      }
+      items.forEach(itemText => {
+        const li = document.createElement('li');
+        li.textContent = itemText.textContent;
+        list.appendChild(li);
+      });
+    }
+
+    function makeTeams() {
+      const itemTexts = Array.from(document.querySelectorAll('.item .item-text')).map(el => el.textContent);
+      const count = parseInt(document.getElementById('teamCount').value);
+      const res = document.getElementById('teamResults');
+      if (itemTexts.length < count) { alert('팀 수보다 항목 수가 적습니다.'); return; }
+      const shuffled = itemTexts.sort(() => 0.5 - Math.random());
+      const teams = Array.from({ length: count }, () => []);
+      shuffled.forEach((item, idx) => teams[idx % count].push(item));
+      res.innerHTML = '';
+      teams.forEach((t, i) => {
+        const box = document.createElement('div');
+        box.className = 'team-box';
+        box.innerHTML = `<strong>팀 ${i + 1} (${t.length}명)</strong><br>${t.join(', ')}`;
+        res.appendChild(box);
+      });
+    }
+
+    function shareLink() {
+      const data = {
+        title: document.getElementById('boardTitle').value,
+        tiers: [],
+        pool: Array.from(document.querySelectorAll('#pool .item-text')).map(e => e.textContent)
+      };
+
+      document.querySelectorAll('#tierBoard .tier-row:not(.tier-pool)').forEach(row => {
+        data.tiers.push({
+          name: row.querySelector('.tier-label span').textContent,
+          color: row.querySelector('.tier-label').style.backgroundColor,
+          items: Array.from(row.querySelectorAll('.item-text')).map(e => e.textContent)
+        });
+      });
+
+      const jsonStr = JSON.stringify(data);
+      const encoded = encodeURIComponent(jsonStr);
+      const shareableURL = window.location.origin + window.location.pathname + '#data=' + encoded;
+
+      navigator.clipboard.writeText(shareableURL).then(() => {
+        alert('현재 티어표 상태가 포함된 공유 링크가 복사되었습니다!\n원하는 곳에 붙여넣기 하세요.');
+      });
+    }
+
+    function loadFromURL() {
+      const hash = window.location.hash;
+      if (!hash.includes('#data=')) return false;
+      try {
+        const jsonStr = decodeURIComponent(hash.replace('#data=', ''));
+        const data = JSON.parse(jsonStr);
+
+        document.getElementById('boardTitle').value = data.title || '티어표';
+        data.tiers.forEach(t => {
+          const row = createTierRow(t.name, t.color);
+          const container = row.querySelector('.tier-items');
+          t.items.forEach(itemName => addItem(itemName, container));
+        });
+        data.pool.forEach(itemName => addItem(itemName, document.getElementById('pool')));
+        updateRank();
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+  </script>
+</body>
+</html>
