@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>티어표 & 팀 생성기</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <style>
     :root { --bg: #0f172a; --card: #1e293b; --accent: #38bdf8; --text: #f8fafc; }
     body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
@@ -16,8 +17,8 @@
     }
     .title-input:focus { outline: none; border-bottom-color: var(--accent); }
     
-    .controls { display: flex; gap: 10px; justify-content: center; background: var(--card); padding: 15px; border-radius: 8px; margin-bottom: 20px; flex-wrap: wrap; }
-    input, button { padding: 10px; border-radius: 6px; border: 1px solid #334155; background: #0f172a; color: white; font-size: 0.9rem; }
+    .controls { display: flex; gap: 8px; justify-content: center; background: var(--card); padding: 15px; border-radius: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+    input, button { padding: 8px 12px; border-radius: 6px; border: 1px solid #334155; background: #0f172a; color: white; font-size: 0.85rem; }
     button { background: var(--accent); color: #000; font-weight: bold; cursor: pointer; border: none; }
     button.sec { background: #475569; color: white; }
     button.success { background: #22c55e; color: white; }
@@ -25,8 +26,8 @@
     
     .container { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
     
-    /* --- 기본 가로 레이아웃 --- */
-    .tier-board { display: flex; flex-direction: column; gap: 8px; }
+    /* 가로 레이아웃 */
+    .tier-board { display: flex; flex-direction: column; gap: 8px; padding: 10px; background: #0f172a; border-radius: 8px; }
     .tier-row { display: flex; background: var(--card); border-radius: 6px; min-height: 60px; align-items: stretch; position: relative; }
     
     .tier-label { 
@@ -38,7 +39,7 @@
     .tier-pool { background: #334155; }
     .tier-pool-label { background: #475569; color: white; cursor: default; }
 
-    /* --- 세로 레이아웃 (.vertical) --- */
+    /* 세로 레이아웃 (.vertical) */
     .tier-board.vertical {
       flex-direction: row;
       overflow-x: auto;
@@ -66,18 +67,18 @@
       min-width: 160px;
     }
 
-    /* 드래그 항목 카드 */
+    /* 드래그 항목 카드 (색상 가변) */
     .item { 
       display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; 
-      background: #3b82f6; color: white; border-radius: 4px; cursor: grab; font-weight: bold; user-select: none;
-      word-break: break-all;
+      color: #000; border-radius: 4px; cursor: grab; font-weight: bold; user-select: none;
+      word-break: break-all; box-shadow: 0 2px 4px rgba(0,0,0,0.2);
     }
     .item.dragging { opacity: 0.4; }
     .item-del-btn { 
-      background: none; border: none; color: #fca5a5; cursor: pointer; 
+      background: none; border: none; color: rgba(0,0,0,0.5); cursor: pointer; 
       font-weight: bold; padding: 0 2px; font-size: 1rem; line-height: 1;
     }
-    .item-del-btn:hover { color: #ef4444; }
+    .item-del-btn:hover { color: #000; }
 
     .sidebar { display: flex; flex-direction: column; gap: 20px; }
     .panel { background: var(--card); padding: 15px; border-radius: 8px; }
@@ -101,10 +102,12 @@
     <input type="text" id="itemName" placeholder="이름 입력" onkeydown="if(event.key==='Enter') addItem()">
     <button onclick="addItem()">항목 추가</button>
     <button onclick="addTier()" class="sec">+ 티어 추가</button>
-    <button onclick="toggleLayout()" class="sec">📱 방향 전환 (가로/세로)</button>
-    <button onclick="undo()" class="sec" title="단축키: Ctrl+Z">↩ 되돌리기 (Ctrl+Z)</button>
+    <button onclick="resetAllItemsToPool()" class="sec">📥 전체 대기목록으로 내리기</button>
+    <button onclick="toggleLayout()" class="sec">📱 방향 전환</button>
+    <button onclick="undo()" class="sec" title="단축키: Ctrl+Z">↩ 되돌리기</button>
+    <button onclick="downloadImage()" class="success">🖼️ 이미지 저장</button>
+    <button onclick="shareLink()" class="success">🔗 공유 링크</button>
     <button onclick="resetData()" class="danger">🗑️ 초기화</button>
-    <button onclick="shareLink()" class="success">🔗 저장 및 링크 공유</button>
   </div>
 
   <div class="container">
@@ -135,316 +138,14 @@
   <script>
     let idNum = 0;
     let draggedItem = null;
-    const colors = ['#ff7f7f', '#ffbf7f', '#ffff7f', '#7fff7f', '#7fbfff', '#bf7fff', '#ff7fbf'];
-    const historyStack = [];
-    const LOCAL_STORAGE_KEY = 'tierlist_auto_save';
+    
+    // 티어 라벨 색상 목록
+    const tierColors = ['#ff7f7f', '#ffbf7f', '#ffff7f', '#7fff7f', '#7fbfff', '#bf7fff', '#ff7fbf'];
+    
+    // 다양한 항목 카드 색상 (구분하기 쉬운 알록달록한 파스텔 & 밝은 색상)
+    const itemColors = [
+      '#6ee7b7', '#93c5fd', '#fca5a5', '#fde047', '#c084fc', 
+      '#f472b6', '#fb923c', '#a7f3d0', '#fef08a', '#e9d5ff'
+    ];
 
-    window.onload = () => {
-      if (!loadFromURL() && !loadFromLocalStorage()) {
-        setupDefaultTiers();
-      }
-      saveState();
-
-      document.addEventListener('keydown', (e) => {
-        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
-          if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
-          e.preventDefault();
-          undo();
-        }
-      });
-    };
-
-    function toggleLayout() {
-      const board = document.getElementById('tierBoard');
-      board.classList.toggle('vertical');
-      saveState();
-    }
-
-    function getCurrentData() {
-      const board = document.getElementById('tierBoard');
-      const data = {
-        title: document.getElementById('boardTitle').value,
-        isVertical: board.classList.contains('vertical'),
-        tiers: [],
-        pool: Array.from(document.querySelectorAll('#pool .item-text')).map(e => e.textContent)
-      };
-
-      document.querySelectorAll('#tierBoard .tier-row:not(.tier-pool)').forEach(row => {
-        data.tiers.push({
-          name: row.querySelector('.tier-label span').textContent,
-          color: row.querySelector('.tier-label').style.backgroundColor,
-          items: Array.from(row.querySelectorAll('.item-text')).map(e => e.textContent)
-        });
-      });
-      return JSON.stringify(data);
-    }
-
-    function saveState() {
-      const state = getCurrentData();
-      localStorage.setItem(LOCAL_STORAGE_KEY, state);
-
-      if (historyStack.length === 0 || historyStack[historyStack.length - 1] !== state) {
-        historyStack.push(state);
-        if (historyStack.length > 30) historyStack.shift();
-      }
-    }
-
-    function loadFromLocalStorage() {
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (!saved) return false;
-      try {
-        renderFromData(JSON.parse(saved));
-        return true;
-      } catch (e) {
-        return false;
-      }
-    }
-
-    function resetData() {
-      if (confirm('모든 데이터가 초기화됩니다. 정말 초기화하시겠습니까?')) {
-        localStorage.removeItem(LOCAL_STORAGE_KEY);
-        location.hash = '';
-        location.reload();
-      }
-    }
-
-    function undo() {
-      if (historyStack.length <= 1) return;
-      historyStack.pop();
-      const previousState = historyStack[historyStack.length - 1];
-      renderFromData(JSON.parse(previousState));
-      localStorage.setItem(LOCAL_STORAGE_KEY, previousState);
-    }
-
-    function renderFromData(data) {
-      document.getElementById('boardTitle').value = data.title || '티어표';
-      
-      const board = document.getElementById('tierBoard');
-      if (data.isVertical) {
-        board.classList.add('vertical');
-      } else {
-        board.classList.remove('vertical');
-      }
-
-      document.querySelectorAll('#tierBoard .tier-row:not(.tier-pool)').forEach(r => r.remove());
-      document.getElementById('pool').innerHTML = '';
-
-      data.tiers.forEach(t => {
-        const row = createTierRow(t.name, t.color, false);
-        const container = row.querySelector('.tier-items');
-        t.items.forEach(itemName => addItem(itemName, container, false));
-      });
-      data.pool.forEach(itemName => addItem(itemName, document.getElementById('pool'), false));
-      updateRank();
-    }
-
-    function setupDefaultTiers() {
-      createTierRow('S', '#ff7f7f', false);
-      createTierRow('A', '#ffbf7f', false);
-    }
-
-    function createTierRow(name, color, recordHistory = true) {
-      const board = document.getElementById('tierBoard');
-      const poolRow = document.getElementById('poolRow');
-      const row = document.createElement('div');
-      row.className = 'tier-row';
-      row.innerHTML = `
-        <div class="tier-label" style="background:${color}">
-          <span onclick="editLabelInline(this)">${name}</span>
-        </div>
-        <div class="tier-items" ondragover="allowDrop(event)" ondrop="drop(event)"></div>
-        <button class="danger" onclick="deleteTier(this)" style="font-size: 0.75rem; padding: 4px;">삭제</button>
-      `;
-      board.insertBefore(row, poolRow);
-      if (recordHistory) saveState();
-      return row;
-    }
-
-    function addItem(nameVal = null, targetContainer = null, recordHistory = true) {
-      const input = document.getElementById('itemName');
-      const val = nameVal || input.value.trim();
-      if (!val) return;
-
-      const item = document.createElement('div');
-      item.className = 'item';
-      item.draggable = true;
-      item.id = 'item-' + idNum++;
-      item.innerHTML = `
-        <span class="item-text" onclick="editItemTextInline(this)">${val}</span>
-        <button class="item-del-btn" onclick="deleteItem(this)" title="삭제">×</button>
-      `;
-
-      item.ondragstart = (e) => {
-        if (e.target.tagName === 'INPUT') { e.preventDefault(); return; }
-        draggedItem = item;
-        item.classList.add('dragging');
-        e.dataTransfer.setData('text', item.id);
-      };
-
-      item.ondragend = () => {
-        draggedItem = null;
-        item.classList.remove('dragging');
-        updateRank();
-        saveState();
-      };
-
-      const parent = targetContainer || document.getElementById('pool');
-      parent.appendChild(item);
-      if (!nameVal) input.value = '';
-      updateRank();
-      if (recordHistory) saveState();
-    }
-
-    function editItemTextInline(spanEl) {
-      const input = document.createElement('input');
-      input.type = 'text';
-      input.value = spanEl.textContent;
-      input.style.width = '60px';
-      input.onblur = () => finishEditItemText(input, spanEl);
-      input.onkeydown = (e) => { if (e.key === 'Enter') finishEditItemText(input, spanEl); };
-      spanEl.replaceWith(input);
-      input.focus(); input.select();
-    }
-
-    function finishEditItemText(input, spanEl) {
-      spanEl.textContent = input.value.trim() || '항목';
-      input.replaceWith(spanEl);
-      updateRank();
-      saveState();
-    }
-
-    function deleteItem(btn) {
-      btn.parentElement.remove();
-      updateRank();
-      saveState();
-    }
-
-    function addTier() {
-      const color = colors[Math.floor(Math.random() * colors.length)];
-      createTierRow('NEW', color);
-    }
-
-    function editLabelInline(spanEl) {
-      const input = document.createElement('input');
-      input.type = 'text';
-      input.value = spanEl.textContent;
-      input.style.width = '50px';
-      input.onblur = () => finishEditLabel(input, spanEl);
-      input.onkeydown = (e) => { if (e.key === 'Enter') finishEditLabel(input, spanEl); };
-      spanEl.replaceWith(input);
-      input.focus(); input.select();
-    }
-
-    function finishEditLabel(input, spanEl) {
-      spanEl.textContent = input.value.trim() || '티어';
-      input.replaceWith(spanEl);
-      saveState();
-    }
-
-    function deleteTier(btn) {
-      const row = btn.parentElement;
-      const items = row.querySelector('.tier-items').children;
-      const pool = document.getElementById('pool');
-      while (items.length > 0) pool.appendChild(items[0]);
-      row.remove();
-      updateRank();
-      saveState();
-    }
-
-    function allowDrop(e) {
-      e.preventDefault();
-      let container = e.target;
-      if (!container.classList.contains('tier-items')) {
-        container = container.closest('.tier-items');
-      }
-      if (!container || !draggedItem) return;
-
-      const afterElement = getDragAfterElement(container, e.clientX, e.clientY);
-      if (afterElement == null) {
-        container.appendChild(draggedItem);
-      } else {
-        container.insertBefore(draggedItem, afterElement);
-      }
-    }
-
-    function getDragAfterElement(container, x, y) {
-      const draggableElements = [...container.querySelectorAll('.item:not(.dragging)')];
-
-      return draggableElements.reduce((closest, child) => {
-        const box = child.getBoundingClientRect();
-        const offsetX = x - (box.left + box.width / 2);
-        const offsetY = y - (box.top + box.height / 2);
-
-        if (offsetY < -5 || (Math.abs(offsetY) <= 15 && offsetX < 0)) {
-          const distance = Math.hypot(offsetX, offsetY);
-          if (distance < closest.distance) {
-            return { distance: distance, element: child };
-          }
-        }
-        return closest;
-      }, { distance: Number.POSITIVE_INFINITY }).element;
-    }
-
-    function drop(e) {
-      e.preventDefault();
-      updateRank();
-      saveState();
-    }
-
-    function updateRank() {
-      const list = document.getElementById('rankingList');
-      const items = document.querySelectorAll('#tierBoard .tier-row:not(.tier-pool) .item .item-text');
-      list.innerHTML = '';
-      if (items.length === 0) {
-        list.innerHTML = '<span style="color:#64748b">배치된 항목이 없습니다.</span>';
-        return;
-      }
-      items.forEach(itemText => {
-        const li = document.createElement('li');
-        li.textContent = itemText.textContent;
-        list.appendChild(li);
-      });
-    }
-
-    function makeTeams() {
-      const itemTexts = Array.from(document.querySelectorAll('.item .item-text')).map(el => el.textContent);
-      const count = parseInt(document.getElementById('teamCount').value);
-      const res = document.getElementById('teamResults');
-      if (itemTexts.length < count) { alert('팀 수보다 항목 수가 적습니다.'); return; }
-      const shuffled = itemTexts.sort(() => 0.5 - Math.random());
-      const teams = Array.from({ length: count }, () => []);
-      shuffled.forEach((item, idx) => teams[idx % count].push(item));
-      res.innerHTML = '';
-      teams.forEach((t, i) => {
-        const box = document.createElement('div');
-        box.className = 'team-box';
-        box.innerHTML = `<strong>팀 ${i + 1} (${t.length}명)</strong><br>${t.join(', ')}`;
-        res.appendChild(box);
-      });
-    }
-
-    function shareLink() {
-      const jsonStr = getCurrentData();
-      const encoded = encodeURIComponent(jsonStr);
-      const shareableURL = window.location.origin + window.location.pathname + '#data=' + encoded;
-
-      navigator.clipboard.writeText(shareableURL).then(() => {
-        alert('현재 티어, 방향 및 순서가 포함된 공유 링크가 복사되었습니다!');
-      });
-    }
-
-    function loadFromURL() {
-      const hash = window.location.hash;
-      if (!hash.includes('#data=')) return false;
-      try {
-        const jsonStr = decodeURIComponent(hash.replace('#data=', ''));
-        const data = JSON.parse(jsonStr);
-        renderFromData(data);
-        return true;
-      } catch (e) {
-        return false;
-      }
-    }
-  </script>
-</body>
-</html>
+    const history
