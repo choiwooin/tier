@@ -183,11 +183,14 @@
 
       <div class="roulette-input-box">
         <div style="display:flex; justify-content:space-between; align-items:center;">
-          <label for="rouletteListInput">🎰 룰렛 항목 목록 (줄바꿈 구분)</label>
+          <label for="rouletteListInput">🎰 룰렛 항목 및 확률 조절</label>
           <button type="button" onclick="copyFromTierlist()" class="sec" style="font-size:0.8rem; padding:6px 10px;">📋 티어표 항목 불러오기</button>
         </div>
-        <textarea id="rouletteListInput" placeholder="룰렛에 넣을 항목을 한 줄에 하나씩 입력하세요.&#10;예시:&#10;항목 1&#10;항목 2&#10;항목 3" oninput="drawRoulette()"></textarea>
-        <span style="font-size:0.8rem; color:#64748b;">※ 티어표와 별개로 항목을 자유롭게 추가하거나 지울 수 있습니다.</span>
+        <textarea id="rouletteListInput" placeholder="한 줄에 하나씩 입력하세요.&#10;확률(비중)을 지정하려면 '항목명:숫자' 형태로 입력하세요.&#10;&#10;예시:&#10;당첨:1&#10;꽝:5&#10;대박:0.5" oninput="drawRoulette()"></textarea>
+        <span style="font-size:0.8rem; color:#94a3b8; line-height:1.4;">
+          💡 <b>확률 설정 팁</b>: <code>항목명:비중</code> (예: <code>꽝:3</code>)<br>
+          숫자가 크면 부채꼴 영역이 넓어지고 당첨 확률이 높아집니다. (기본값: 1)
+        </span>
       </div>
     </div>
   </div>
@@ -622,7 +625,7 @@
       });
     }
 
-    /* 독립 룰렛 페이지 로직 */
+    /* 독립 룰렛 페이지 로직 (확률 조절 기능 포함) */
     function copyFromTierlist() {
       var itemTexts = Array.from(document.querySelectorAll('.item .item-text')).map(function(el) { return el.textContent; });
       document.getElementById('rouletteListInput').value = itemTexts.join('\n');
@@ -631,19 +634,43 @@
 
     function getRouletteItems() {
       var text = document.getElementById('rouletteListInput').value;
-      return text.split('\n').map(function(s) { return s.trim(); }).filter(function(s) { return s.length > 0; });
+      var lines = text.split('\n').map(function(s) { return s.trim(); }).filter(function(s) { return s.length > 0; });
+
+      var items = [];
+      var totalWeight = 0;
+
+      lines.forEach(function(line) {
+        var parts = line.split(':');
+        var name = parts[0].trim();
+        var weight = 1;
+
+        if (parts.length > 1) {
+          var parsedWeight = parseFloat(parts[1]);
+          if (!isNaN(parsedWeight) && parsedWeight > 0) {
+            weight = parsedWeight;
+          }
+        }
+
+        if (name) {
+          items.push({ name: name, weight: weight });
+          totalWeight += weight;
+        }
+      });
+
+      return { items: items, totalWeight: totalWeight };
     }
 
     function drawRoulette() {
       var canvas = document.getElementById('rouletteCanvas');
       if (!canvas) return;
       var ctx = canvas.getContext('2d');
-      var items = getRouletteItems();
-      var numItems = items.length;
+      var data = getRouletteItems();
+      var items = data.items;
+      var totalWeight = data.totalWeight;
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      if (numItems === 0) {
+      if (items.length === 0) {
         ctx.fillStyle = '#334155';
         ctx.beginPath();
         ctx.arc(150, 150, 150, 0, Math.PI * 2);
@@ -655,31 +682,40 @@
         return;
       }
 
-      var arc = (Math.PI * 2) / numItems;
+      var currentAngle = 0;
 
-      items.forEach(function(itemText, i) {
-        var angle = i * arc;
-        ctx.fillStyle = itemColors[i % itemColors.length];
+      items.forEach(function(item, i) {
+        var arc = (item.weight / totalWeight) * (Math.PI * 2);
         
+        ctx.fillStyle = itemColors[i % itemColors.length];
         ctx.beginPath();
-        ctx.arc(150, 150, 150, angle, angle + arc);
+        ctx.arc(150, 150, 150, currentAngle, currentAngle + arc);
         ctx.lineTo(150, 150);
         ctx.fill();
 
         ctx.save();
         ctx.translate(150, 150);
-        ctx.rotate(angle + arc / 2);
+        ctx.rotate(currentAngle + arc / 2);
         ctx.textAlign = 'right';
         ctx.fillStyle = '#000000';
         ctx.font = 'bold 14px system-ui';
-        var displayText = itemText.length > 9 ? itemText.substring(0, 8) + '..' : itemText;
+
+        var percentStr = Math.round((item.weight / totalWeight) * 100) + '%';
+        var displayText = item.name + (items.length <= 8 ? ' (' + percentStr + ')' : '');
+        if (displayText.length > 12) displayText = displayText.substring(0, 10) + '..';
+
         ctx.fillText(displayText, 135, 5);
         ctx.restore();
+
+        currentAngle += arc;
       });
     }
 
     function spinRoulette() {
-      var items = getRouletteItems();
+      var data = getRouletteItems();
+      var items = data.items;
+      var totalWeight = data.totalWeight;
+
       if (items.length < 2) {
         alert('룰렛을 돌리려면 최소 2개 이상의 항목이 필요합니다!');
         return;
@@ -698,12 +734,23 @@
 
       setTimeout(function() {
         isSpinning = false;
+
+        // 화살표가 가리키는 실제 각도 계산 (12시 방향 기준)
         var actualDegree = (totalRotation % 360 + 360) % 360;
         var winningDegree = (270 - actualDegree + 360) % 360;
-        var sliceAngle = 360 / items.length;
-        var winningIndex = Math.floor(winningDegree / sliceAngle);
+        var winningRatio = winningDegree / 360;
 
-        var winner = items[winningIndex];
+        var accumulatedWeight = 0;
+        var winner = items[0].name;
+
+        for (var i = 0; i < items.length; i++) {
+          accumulatedWeight += items[i].weight;
+          if (winningRatio <= (accumulatedWeight / totalWeight)) {
+            winner = items[i].name;
+            break;
+          }
+        }
+
         document.getElementById('rouletteResult').textContent = '🎉 당첨: ' + winner;
       }, 4000);
     }
