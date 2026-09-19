@@ -3,22 +3,34 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>티어표 & 팀 생성기</title>
+  <title>티어표 & 룰렛</title>
   <style>
-    :root { --bg: #0f172a; --card: #1e293b; --accent: #38bdf8; --text: #f8fafc; }
+    :root { --bg: #0f172a; --card: #1e293b; --accent: #00a2ff; --text: #f8fafc; }
     body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
     
+    /* 최상단 탭 버튼 */
+    .top-nav { display: flex; justify-content: center; gap: 15px; margin-bottom: 20px; }
+    .nav-btn {
+      background: #00a2ff; color: #000; font-size: 1.5rem; font-weight: bold;
+      padding: 12px 40px; border: none; border-radius: 4px; cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .nav-btn.inactive { background: #334155; color: #94a3b8; }
+    .nav-btn:hover { opacity: 0.9; }
+
+    /* 메인 타이틀 */
     .title-container { text-align: center; margin-bottom: 20px; }
     .title-input {
-      font-size: 1.8rem; font-weight: bold; color: var(--accent);
+      font-size: 1.8rem; font-weight: bold; color: #38bdf8;
       background: transparent; border: none; border-bottom: 2px dashed #334155;
       text-align: center; width: 80%; max-width: 600px; padding: 5px;
     }
-    .title-input:focus { outline: none; border-bottom-color: var(--accent); }
+    .title-input:focus { outline: none; border-bottom-color: #38bdf8; }
     
+    /* 조작 버튼 바 */
     .controls { display: flex; gap: 8px; justify-content: center; background: var(--card); padding: 15px; border-radius: 8px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; }
     input, button, select { padding: 8px 12px; border-radius: 6px; border: 1px solid #334155; background: #0f172a; color: white; font-size: 0.85rem; }
-    button { background: var(--accent); color: #000; font-weight: bold; cursor: pointer; border: none; }
+    button { background: #38bdf8; color: #000; font-weight: bold; cursor: pointer; border: none; }
     button.sec { background: #475569; color: white; }
     button.success { background: #22c55e; color: white; }
     button.danger { background: #ef4444; color: white; }
@@ -26,7 +38,10 @@
     
     .save-group { display: flex; gap: 4px; align-items: center; background: #0f172a; padding: 4px 8px; border-radius: 6px; border: 1px solid #334155; }
 
+    /* 레이아웃 */
     .container { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+    .page-section { display: none; }
+    .page-section.active { display: block; }
     
     .tier-board { display: flex; flex-direction: column; gap: 8px; padding: 10px; background: #0f172a; border-radius: 8px; min-height: 200px; }
     .tier-row { display: flex; background: var(--card); border-radius: 6px; min-height: 60px; align-items: stretch; position: relative; }
@@ -59,135 +74,120 @@
 
     .sidebar { display: flex; flex-direction: column; gap: 20px; }
     .panel { background: var(--card); padding: 15px; border-radius: 8px; }
-    .panel h2 { margin-top: 0; color: var(--accent); font-size: 1.1rem; }
+    .panel h2 { margin-top: 0; color: #38bdf8; font-size: 1.1rem; }
     ol { padding-left: 20px; margin: 0; }
     li { margin-bottom: 4px; }
     .team-box { background: #0f172a; padding: 8px; border-radius: 6px; margin-top: 8px; border: 1px solid #334155; }
 
-    /* 모달 팝업 스타일 (독립 룰렛 전용) */
-    .modal-backdrop {
-      position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-      background: rgba(0, 0, 0, 0.7); display: none; justify-content: center; align-items: center;
-      z-index: 1000; backdrop-filter: blur(4px);
-    }
-    .modal-backdrop.active { display: flex; }
-
-    .modal-content {
+    /* 독립 룰렛 전용 페이지 스타일 */
+    .roulette-page-container {
       background: var(--card); border: 2px solid #334155; border-radius: 12px;
-      padding: 24px; width: 90%; max-width: 650px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5);
-      position: relative; max-height: 90vh; overflow-y: auto;
+      padding: 30px; max-width: 900px; margin: 0 auto;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 30px; align-items: center;
     }
-
-    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #334155; padding-bottom: 10px; }
-    .modal-header h2 { margin: 0; color: #a855f7; font-size: 1.4rem; }
-    .close-btn { background: none; border: none; color: #94a3b8; font-size: 1.5rem; cursor: pointer; font-weight: bold; }
-    .close-btn:hover { color: #f8fafc; }
-
-    .roulette-modal-body { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: center; }
-    @media (max-width: 600px) { .roulette-modal-body { grid-template-columns: 1fr; } }
-
-    .roulette-container { display: flex; flex-direction: column; align-items: center; gap: 15px; }
-    .roulette-wrapper { position: relative; width: 220px; height: 220px; }
+    .roulette-display { display: flex; flex-direction: column; align-items: center; gap: 20px; }
+    .roulette-wrapper { position: relative; width: 300px; height: 300px; }
     .roulette-pointer {
-      position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+      position: absolute; top: -15px; left: 50%; transform: translateX(-50%);
       width: 0; height: 0; 
-      border-left: 12px solid transparent; border-right: 12px solid transparent; border-top: 22px solid #ef4444;
-      z-index: 10; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));
+      border-left: 15px solid transparent; border-right: 15px solid transparent; border-top: 28px solid #ef4444;
+      z-index: 10; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
     }
-    #rouletteCanvas { width: 220px; height: 220px; border-radius: 50%; border: 4px solid #334155; transition: transform 4s cubic-bezier(0.15, 0.9, 0.2, 1); }
-    .roulette-result { font-weight: bold; font-size: 1.1rem; color: #a855f7; min-height: 28px; text-align: center; }
+    #rouletteCanvas { width: 300px; height: 300px; border-radius: 50%; border: 5px solid #334155; transition: transform 4s cubic-bezier(0.15, 0.9, 0.2, 1); }
+    .roulette-result { font-weight: bold; font-size: 1.4rem; color: #38bdf8; min-height: 35px; text-align: center; }
 
-    .roulette-setting-box { display: flex; flex-direction: column; gap: 10px; }
-    .roulette-setting-box label { font-size: 0.9rem; font-weight: bold; color: #94a3b8; }
-    .roulette-setting-box textarea {
-      width: 100%; height: 160px; background: #0f172a; border: 1px solid #334155;
-      border-radius: 6px; color: #f8fafc; padding: 10px; box-sizing: border-box;
-      font-family: inherit; font-size: 0.9rem; resize: none;
+    .roulette-input-box { display: flex; flex-direction: column; gap: 12px; }
+    .roulette-input-box label { font-size: 1rem; font-weight: bold; color: #94a3b8; }
+    .roulette-input-box textarea {
+      width: 100%; height: 220px; background: #0f172a; border: 1px solid #334155;
+      border-radius: 6px; color: #f8fafc; padding: 12px; box-sizing: border-box;
+      font-family: inherit; font-size: 0.95rem; resize: none; line-height: 1.5;
     }
 
     @media (max-width: 768px) {
       .container { grid-template-columns: 1fr; }
+      .roulette-page-container { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
 
+  <!-- 상단 큰 탭 버튼 -->
+  <div class="top-nav">
+    <button type="button" class="nav-btn" id="tabTier" onclick="switchTab('tier')">티어표</button>
+    <button type="button" class="nav-btn inactive" id="tabRoulette" onclick="switchTab('roulette')">룰렛</button>
+  </div>
+
   <div class="title-container">
-    <input type="text" id="boardTitle" class="title-input" value="티어표 주제를 입력하세요" onfocus="this.select()" oninput="autoSave()">
+    <input type="text" id="boardTitle" class="title-input" value="롤 실력 이것저것 싹다" onfocus="this.select()" oninput="autoSave()">
   </div>
 
-  <div class="controls">
-    <input type="text" id="itemName" placeholder="이름 입력" onkeydown="if(event.key==='Enter') addItem()">
-    <button type="button" onclick="addItem()">항목 추가</button>
-    <button type="button" onclick="addTier()" class="sec">+ 티어 추가</button>
-    <button type="button" onclick="resetAllItemsToPool()" class="sec">📥 대기목록으로 내리기</button>
-    <button type="button" onclick="toggleLayout()" class="sec">📱 방향 전환</button>
-    <button type="button" onclick="undo()" class="sec">↩ 되돌리기</button>
-    
-    <!-- 저장 슬롯 10개 및 이름 변경 기능 -->
-    <div class="save-group">
-      <select id="slotSelect"></select>
-      <button type="button" onclick="renameSlot()" class="sec" title="선택한 슬롯 이름 변경">✏️ 이름 변경</button>
-      <button type="button" onclick="saveToSlot()" class="success">💾 저장</button>
-      <button type="button" onclick="loadFromSlot()" class="sec">📂 불러오기</button>
-    </div>
-
-    <!-- 독립 룰렛 열기 버튼 -->
-    <button type="button" onclick="openRouletteModal()" class="special">🎰 룰렛 (독립 공간)</button>
-    <button type="button" onclick="shareLink()" class="success">🔗 링크 복사</button>
-    <button type="button" onclick="resetData()" class="danger">🗑️ 초기화</button>
-  </div>
-
-  <div class="container">
-    <div class="tier-board" id="tierBoard">
-      <div class="tier-row tier-pool" id="poolRow">
-        <div class="tier-label tier-pool-label">대기목록</div>
-        <div class="tier-items" id="pool" ondragover="allowDrop(event)" ondrop="drop(event)"></div>
-      </div>
-    </div>
-
-    <div class="sidebar">
-      <div class="panel">
-        <h2>실시간 순위</h2>
-        <ol id="rankingList"><span style="color:#64748b">배치된 항목이 없습니다.</span></ol>
+  <!-- [1] 티어표 페이지 -->
+  <div id="tierPage" class="page-section active">
+    <div class="controls">
+      <input type="text" id="itemName" placeholder="이름 입력" onkeydown="if(event.key==='Enter') addItem()">
+      <button type="button" onclick="addItem()">항목 추가</button>
+      <button type="button" onclick="addTier()" class="sec">+ 티어 추가</button>
+      <button type="button" onclick="resetAllItemsToPool()" class="sec">📥 대기목록으로 내리기</button>
+      <button type="button" onclick="toggleLayout()" class="sec">📱 방향 전환</button>
+      <button type="button" onclick="undo()" class="sec">↩ 되돌리기</button>
+      
+      <div class="save-group">
+        <select id="slotSelect"></select>
+        <button type="button" onclick="renameSlot()" class="sec" title="선택한 슬롯 이름 변경">✏️ 이름 변경</button>
+        <button type="button" onclick="saveToSlot()" class="success">💾 저장</button>
+        <button type="button" onclick="loadFromSlot()" class="sec">📂 불러오기</button>
       </div>
 
-      <div class="panel">
-        <h2>팀 무작위 생성</h2>
-        <div style="display:flex; gap:5px; margin-bottom:10px;">
-          <input type="number" id="teamCount" value="2" min="2" style="width:50px;">
-          <button type="button" onclick="makeTeams()">팀 나누기</button>
+      <button type="button" onclick="shareLink()" class="success">🔗 링크 복사</button>
+      <button type="button" onclick="resetData()" class="danger">🗑️ 초기화</button>
+    </div>
+
+    <div class="container">
+      <div class="tier-board" id="tierBoard">
+        <div class="tier-row tier-pool" id="poolRow">
+          <div class="tier-label tier-pool-label">대기목록</div>
+          <div class="tier-items" id="pool" ondragover="allowDrop(event)" ondrop="drop(event)"></div>
         </div>
-        <div id="teamResults"></div>
       </div>
-    </div>
-  </div>
 
-  <!-- 독립 룰렛 모달 (팝업창) -->
-  <div class="modal-backdrop" id="rouletteModal">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h2>🎰 룰렛 추첨기 (독립 공간)</h2>
-        <button type="button" class="close-btn" onclick="closeRouletteModal()">×</button>
-      </div>
-      <div class="roulette-modal-body">
-        <div class="roulette-container">
-          <div class="roulette-wrapper">
-            <div class="roulette-pointer"></div>
-            <canvas id="rouletteCanvas" width="220" height="220"></canvas>
+      <div class="sidebar">
+        <div class="panel">
+          <h2>실시간 순위</h2>
+          <ol id="rankingList"><span style="color:#64748b">배치된 항목이 없습니다.</span></ol>
+        </div>
+
+        <div class="panel">
+          <h2>팀 무작위 생성</h2>
+          <div style="display:flex; gap:5px; margin-bottom:10px;">
+            <input type="number" id="teamCount" value="2" min="2" style="width:50px;">
+            <button type="button" onclick="makeTeams()">팀 나누기</button>
           </div>
-          <button type="button" onclick="spinRoulette()" class="special" style="width: 100%; font-size: 1rem; padding: 10px;">🎯 룰렛 돌리기!</button>
-          <div id="rouletteResult" class="roulette-result"></div>
+          <div id="teamResults"></div>
         </div>
+      </div>
+    </div>
+  </div>
 
-        <div class="roulette-setting-box">
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <label for="rouletteListInput">룰렛 항목 목록 (줄바꿈 구분)</label>
-            <button type="button" onclick="copyFromTierlist()" class="sec" style="font-size:0.75rem; padding:4px 8px;">📋 티어표 항목 가져오기</button>
-          </div>
-          <textarea id="rouletteListInput" placeholder="항목을 한 줄에 하나씩 입력하세요.&#10;예시:&#10;항목 1&#10;항목 2&#10;항목 3" oninput="drawRoulette()"></textarea>
-          <span style="font-size:0.75rem; color:#64748b;">※ 티어표와 별개로 자유롭게 항목을 추가/수정할 수 있습니다.</span>
+  <!-- [2] 독립 룰렛 페이지 -->
+  <div id="roulettePage" class="page-section">
+    <div class="roulette-page-container">
+      <div class="roulette-display">
+        <div class="roulette-wrapper">
+          <div class="roulette-pointer"></div>
+          <canvas id="rouletteCanvas" width="300" height="300"></canvas>
         </div>
+        <button type="button" onclick="spinRoulette()" style="width: 100%; font-size: 1.2rem; padding: 12px; background: #00a2ff; color: #000;">🎯 룰렛 돌리기!</button>
+        <div id="rouletteResult" class="roulette-result"></div>
+      </div>
+
+      <div class="roulette-input-box">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <label for="rouletteListInput">🎰 룰렛 항목 목록 (줄바꿈 구분)</label>
+          <button type="button" onclick="copyFromTierlist()" class="sec" style="font-size:0.8rem; padding:6px 10px;">📋 티어표 항목 불러오기</button>
+        </div>
+        <textarea id="rouletteListInput" placeholder="룰렛에 넣을 항목을 한 줄에 하나씩 입력하세요.&#10;예시:&#10;항목 1&#10;항목 2&#10;항목 3" oninput="drawRoulette()"></textarea>
+        <span style="font-size:0.8rem; color:#64748b;">※ 티어표와 별개로 항목을 자유롭게 추가하거나 지울 수 있습니다.</span>
       </div>
     </div>
   </div>
@@ -196,14 +196,13 @@
     var idNum = 0;
     var draggedItem = null;
     
-    var tierColors = ['#ff7f7f', '#ffbf7f', '#ffff7f', '#7fff7f', '#7fbfff', '#bf7fff', '#ff7fbf'];
+    var tierColors = ['#ffff7f', '#7fbfff', '#7fff7f', '#7fff7f', '#ff8f8f', '#ff7fbf'];
     var itemColors = ['#6ee7b7', '#93c5fd', '#fca5a5', '#fde047', '#c084fc', '#f472b6', '#fb923c', '#a7f3d0', '#fef08a', '#e9d5ff'];
 
     var historyStack = [];
-    var AUTO_SAVE_KEY = 'tierlist_auto_save_v4';
+    var AUTO_SAVE_KEY = 'tierlist_auto_save_v5';
     var SLOT_NAMES_KEY = 'tierlist_slot_names';
 
-    // 룰렛 관련 변수
     var currentRotation = 0;
     var isSpinning = false;
 
@@ -227,6 +226,33 @@
         }
       });
     };
+
+    /* 탭 전환 함수 */
+    function switchTab(tab) {
+      var tabTier = document.getElementById('tabTier');
+      var tabRoulette = document.getElementById('tabRoulette');
+      var tierPage = document.getElementById('tierPage');
+      var roulettePage = document.getElementById('roulettePage');
+
+      if (tab === 'tier') {
+        tabTier.classList.remove('inactive');
+        tabRoulette.classList.add('inactive');
+        tierPage.classList.add('active');
+        roulettePage.classList.remove('active');
+      } else {
+        tabRoulette.classList.remove('inactive');
+        tabTier.classList.add('inactive');
+        roulettePage.classList.add('active');
+        tierPage.classList.remove('active');
+        
+        var textarea = document.getElementById('rouletteListInput');
+        if (!textarea.value.trim()) {
+          copyFromTierlist();
+        } else {
+          drawRoulette();
+        }
+      }
+    }
 
     function initSlotDropdown() {
       var select = document.getElementById('slotSelect');
@@ -413,8 +439,10 @@
     }
 
     function setupDefaultTiers() {
-      createTierRow('S', '#ff7f7f', false);
-      createTierRow('A', '#ffbf7f', false);
+      var defaultNames = ['1', '2', '3', '4', '5', '6'];
+      defaultNames.forEach(function(name, idx) {
+        createTierRow(name, tierColors[idx % tierColors.length], false);
+      });
     }
 
     function createTierRow(name, color, record) {
@@ -594,23 +622,7 @@
       });
     }
 
-    /* 독립 룰렛 모달 관리 기능 */
-    function openRouletteModal() {
-      var modal = document.getElementById('rouletteModal');
-      modal.classList.add('active');
-      
-      var textarea = document.getElementById('rouletteListInput');
-      if (!textarea.value.trim()) {
-        copyFromTierlist();
-      } else {
-        drawRoulette();
-      }
-    }
-
-    function closeRouletteModal() {
-      document.getElementById('rouletteModal').classList.remove('active');
-    }
-
+    /* 독립 룰렛 페이지 로직 */
     function copyFromTierlist() {
       var itemTexts = Array.from(document.querySelectorAll('.item .item-text')).map(function(el) { return el.textContent; });
       document.getElementById('rouletteListInput').value = itemTexts.join('\n');
@@ -634,12 +646,12 @@
       if (numItems === 0) {
         ctx.fillStyle = '#334155';
         ctx.beginPath();
-        ctx.arc(110, 110, 110, 0, Math.PI * 2);
+        ctx.arc(150, 150, 150, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillStyle = '#f8fafc';
-        ctx.font = 'bold 13px system-ui';
+        ctx.font = 'bold 15px system-ui';
         ctx.textAlign = 'center';
-        ctx.fillText('항목을 입력해주세요', 110, 115);
+        ctx.fillText('항목을 입력해주세요', 150, 155);
         return;
       }
 
@@ -650,18 +662,18 @@
         ctx.fillStyle = itemColors[i % itemColors.length];
         
         ctx.beginPath();
-        ctx.arc(110, 110, 110, angle, angle + arc);
-        ctx.lineTo(110, 110);
+        ctx.arc(150, 150, 150, angle, angle + arc);
+        ctx.lineTo(150, 150);
         ctx.fill();
 
         ctx.save();
-        ctx.translate(110, 110);
+        ctx.translate(150, 150);
         ctx.rotate(angle + arc / 2);
         ctx.textAlign = 'right';
         ctx.fillStyle = '#000000';
-        ctx.font = 'bold 13px system-ui';
-        var displayText = itemText.length > 7 ? itemText.substring(0, 6) + '..' : itemText;
-        ctx.fillText(displayText, 95, 4);
+        ctx.font = 'bold 14px system-ui';
+        var displayText = itemText.length > 9 ? itemText.substring(0, 8) + '..' : itemText;
+        ctx.fillText(displayText, 135, 5);
         ctx.restore();
       });
     }
